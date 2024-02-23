@@ -1,0 +1,26 @@
+---
+title: "assignment"
+author: "Selina Joy Frei"
+date: "2024-02-23"
+output: html_document
+---
+
+```{r}
+### Assignment week 1 ###
+install.packages(c("gsl","ggplot2","remotes","rmarkdown","UpSetR"))
+# install.packages("BiocManager")
+# BiocManager::install()
+
+BiocManager::install(c("GenomicRanges", "rtracklayer", "EnrichedHeatmap", "AnnotationHub", 
+                       "ensembldb", "edgeR", "esATAC", "sechm", "motifmatchr","rGREAT",
+                       "bsseq","DMRcate","data.table","InteractionSet","chromVAR","limma",
+                       "universalmotif", "MotifDb", "TFBSTools", "Biostrings", "PWMEnrich",
+                       "Rsubread","Rfastp"))
+BiocManager::install("Bioconductor/BiocFileCache")
+BiocManager::install("ETHZ-INS/epiwraps")
+
+
+library(epiwraps)
+sessionInfo()
+```
+
