@@ -11,4 +11,4 @@
       - (tip: this will require you to extract exons of protein-coding transcripts from the database, and split them by transcript, before summing the width of the exons of each transcript)  
     
     
-Name your markdown file `assignment.Rmd`, render it, and put it (along with the produced html) in the `week02` folder of your repository, and push!
+Name your markdown file `assignment.Rmd`, render it (knit), and put it (along with the produced html) in the `week02` folder of your repository, and push!
