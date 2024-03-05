@@ -20,8 +20,8 @@ ah <- AnnotationHub()
 # if you're on renku, use ah <- AnnotationHub(cache="ahcache")
 # to query the AH programmatically:
 q <- query(ah, c("Drosophila", "ensembl"))
-# to browse the AnnotationHub interactively:
-#display(ah)
+# we can check the objects that match:
+q
 
 ensdb <- ah[["AH95713"]]
 ensdb
@@ -82,7 +82,14 @@ gr
 table(overlapsAny(txs_2L, gr, minoverlap=1, type="any"))
 # sum(countOverlaps(txs_2L, gr, minoverlap=1, type="any")) => slightly different result because some transcripts overlap more than once: txs_2L[countOverlaps(txs_2L, gr, minoverlap=1, type="any")==2]
 nearest(gr, txs_2L)
-txs_2L[4800]
-txs_2L[4803]
+
+# nearest selects the closest, and if several have a distance of 0, randomly reports one
+# we can report all with:
+nearest(gr, txs_2L, select="all")
+
+# we could also store the corresponding nearest transcript name 
+# in the object of our regions of interest:
+gr$nearestTx <- txs_2L$tx_name[nearest(gr, txs_2L)]
+
 ```
 
