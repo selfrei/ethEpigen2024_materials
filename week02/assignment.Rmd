@@ -1,0 +1,55 @@
+---
+title: "Assignment week 2"
+author: "Selina Joy Frei"
+date: "2024-03-01"
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub) # to fetch genomes, annotations, etc.
+  library(ensembldb)     # to manipulate ensembl gene annotations
+  library(GenomicRanges) # data structure for genomic ranges 
+  library(epiwraps)      # visualization
+})
+```
+
+```{r}
+## Task 1
+#connect to annotationhub
+ah <- AnnotationHub()
+# query the AH the wanted annotation data:
+q_genome <- query(ah, c("Mus Musculus", "EnsDb","102", "GRCm38"))
+q_genome
+mouse_ensdb <- ah[["AH89211"]]
+
+q_seq <- query(ah, c("TwoBitFile", "Mus musculus", "dna_sm", "GRCm38"))
+q_seq
+mouse_seq <- ah[["AH49775"]]
+
+q_seq2 <- query(ah, c("TwoBitFile", "Drosophila melanogaster", "dna_sm", "BDGP6"))
+q_seq2
+drosophila_seq <- ah[["AH49674"]]
+```
+
+```{r}
+## Task 2
+g <- genes(mouse_ensdb) 
+g[1]
+
+pcg <- g[which(g$gene_biotype=="protein_coding")]
+unique_gene_ids <- unique(pcg$gene_id)
+unique_gene_symbols <- unique(pcg$symbol)
+cat("There are", length(unique_gene_ids)," different gene ids")
+cat("There are", length(unique_gene_symbols)," different gene symbols")
+
+#get exons of protein coding transcripts split by transcripts
+exsPerTx <- exonsBy(mouse_ensdb, column=c("tx_id","tx_biotype"), 
+                    filter=TxBiotypeFilter("protein_coding"))
+#get lengths of exons of each transcript
+exons_lengths <- width(exsPerTx)
+#sum up lengths of exons of each transcript
+transcript_lengths <- sum(exons_lengths)
+#plot distrbution of transcript lengths
+hist(transcript_lengths, breaks = 300, xlim = c(0,15000), xlab = "Transcript length", main = "")
+```
