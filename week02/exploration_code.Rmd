@@ -20,8 +20,8 @@ ah <- AnnotationHub()
 # if you're on renku, use ah <- AnnotationHub(cache="ahcache")
 # to query the AH programmatically:
 q <- query(ah, c("Drosophila", "ensembl"))
-# to browse the AnnotationHub interactively:
-#display(ah)
+# we can check the objects that match:
+q
 
 ensdb <- ah[["AH95713"]]
 ensdb
