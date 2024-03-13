@@ -1,0 +1,106 @@
+---
+title: "assignment week 3"
+author: "Selina Joy Frei"
+date: "2024-03-08"
+output: html_document
+---
+
+```{r}
+# Load required libraries
+suppressPackageStartupMessages({
+  library(AnnotationHub) #retrieve genomes/annotations
+  library(Rsubread) #alignment
+  library(rtracklayer) #import/export files
+  library(Biostrings)#
+  library(Rfastp) #adapter tripping, QC of reads
+  library(epiwraps) #visualiztation
+})
+options(timeout=3600)
+# Create new folder called raw_file and define url for download
+dir.create("raw_file")
+fastq_Dros_url <- "https://www.encodeproject.org/files/ENCFF127RRR/@@download/ENCFF127RRR.fastq.gz"
+
+# Download the FASTQ file
+download.file(fastq_Dros_url, destfile = "raw_file/ENCFF127RRR.fastq.gz", mode = "wb")
+
+```
+
+#trimming away adaptor 
+```{r}
+dir.create("rfastp.trimmed")
+fastq_files <- c(Drosophila = "raw_file/ENCFF127RRR.fastq.gz")
+qc <- lapply(names(fastq_files), function(x) {
+  Rfastp::rfastp(fastq_files[x], thread = 4, overrepresentationAnalysis = TRUE,
+                 outputFastq = file.path("rfastp.trimmed/", gsub("\\.fastq\\.gz$", "", basename(fastq_files[x]))))
+})
+
+```
+
+```{r}
+# create genome index for the Alignment
+# we get the genome sequence from AnnotationHub
+ah <- AnnotationHub()
+q_seq <- query(ah, c("TwoBitFile", "Drosophila", "dna_sm"))
+q_seq
+genome <- ah[["AH49674"]]
+# we create a new directory that will contain the genome index
+dir.create("Drosophila_genome")
+# we write the genome sequence in fasta format
+export(import.2bit(genome), "Drosophila_genome/genome.fasta.gz", compress=TRUE)
+# we build a Rsubread index
+Rsubread::buildindex("Drosophila_genome/rsubread", reference="Drosophila_genome/genome.fasta.gz")
+```
+
+```{r}
+### Alignment + creation of bam files
+dir.create("aligned")
+align.stats <- Rsubread::align(index="Drosophila_genome/rsubread", type="dna",                               readfile1=c("raw_file/ENCFF127RRR.fastq.gz"),                        output_file=c("aligned/Drosophila.bam"),
+                               nthreads=6, sortReadsByCoordinates=TRUE)
+align.stats
+#tells us e.g. how many reads were mapped 
+list.files("aligned")
+
+```
+
+```{r}
+# Peak calling
+dir.create("peaks")
+peaks <- callPeaks("aligned/Drosophila.bam", fragLength=50L)
+```
+
+```{r}
+# look at peak
+head(peaks)
+plotSignalTracks("aligned/Drosophila.bam", region=peaks[1],
+                 extend=1000)
+#extend: look at 1000 nucleotides next to peak
+#since it's a GRanges I can just subset and look at one: peaks[1]
+```
+
+```{r}
+##Report
+cat("There are", align.stats[2,], "total mapped reads")
+cat("The percentage of mapped reads is ", align.stats[2,]/align.stats[1,]*100, "%")
+cat("There are", length(peaks), "peaks")
+
+#Plotting of peak inside a gene
+q_genome <- query(ah, c("Drosophila", "EnsDb"))
+q_genome
+
+drosophila_ensdb <- ah[["AH116255"]]
+
+g <- genes(drosophila_ensdb) 
+
+# I am searching for a peak inside the first gene
+# define a region that is located on a gene
+region <- GRanges("2L", 
+              IRanges(start=start(g)[1],
+                      end=start(g)[1]+10))
+region
+
+#plot the peak inside the defined region
+plotSignalTracks("aligned/Drosophila.bam", region=region,
+                 extend=1000, tracks.params=list(ylim=c(0,10)))
+```
+
+
