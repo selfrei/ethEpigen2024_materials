@@ -1,0 +1,64 @@
+---
+title: "Assignment 4"
+author: "Selina Joy Frei"
+date: "2024-03-19"
+output: html_document
+---
+
+load library
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(rtracklayer)
+  library(epiwraps)
+  library(GenomicRanges)
+})
+ah <- AnnotationHub()
+```
+
+
+```{r, eval=FALSE}
+#Task 1 - download p300 peak
+dir.create("week4")
+download.file("https://www.encodeproject.org/files/ENCFF653YVR/@@download/ENCFF653YVR.bed.gz", dest="week4/p300.bed.gz")
+
+#Task 2 - download H3K4me3
+
+download.file("https://www.encodeproject.org/files/ENCFF247GVM/@@download/ENCFF247GVM.bed.gz", dest="week4/H3K4me3.bed.gz")
+
+# H3K4me1
+download.file("https://www.encodeproject.org/files/ENCFF333IJH/@@download/ENCFF333IJH.bed.gz", dest="week4/H3K4me1.bed.gz")
+
+# H3K27ac
+download.file("https://www.encodeproject.org/files/ENCFF194TQD/@@download/ENCFF194TQD.bed.gz", dest="week4/H3K27ac.bed.gz")
+
+# H3K27me3 peaks
+download.file("https://www.encodeproject.org/files/ENCFF266LHB/@@download/ENCFF266LHB.bed.gz", dest="week4/H3K27me3.bed.gz")
+```
+
+
+```{r}
+# Task 3
+peaks_p300 <- rtracklayer::import("week4/p300.bed.gz", format = "narrowPeak")
+peaks_H3K4me3 <- rtracklayer::import("week4/H3K4me3.bed.gz", format = "narrowPeak")
+peaks_H3K4me1 <- rtracklayer::import("week4/H3K4me1.bed.gz", format = "narrowPeak")
+peaks_H3K27ac <- rtracklayer::import("week4/H3K27ac.bed.gz", format = "narrowPeak")
+peaks_H3K27me3 <- rtracklayer::import("week4/H3K27me3.bed.gz", format = "narrowPeak")
+
+H3K4me3_overlaps <- overlapsAny(peaks_p300, peaks_H3K4me3) 
+H3K4me3_proportion <- table(H3K4me3_overlaps)[2]/(length(peaks_p300))*100
+cat("There is a ", H3K4me3_proportion, "% overlap")
+
+H3K4me1_overlaps <- overlapsAny(peaks_p300, peaks_H3K4me1) 
+H3K4me1_proportion <- table(H3K4me1_overlaps)[2]/(table(H3K4me1_overlaps)[2]+ table(H3K4me1_overlaps)[1])*100
+cat("There is a ", H3K4me1_proportion, "% overlap")
+
+H3K27ac_overlaps <- overlapsAny(peaks_p300, peaks_H3K27ac) 
+H3K27ac_proportion <- table(H3K27ac_overlaps)[2]/(table(H3K27ac_overlaps)[2]+ table(H3K27ac_overlaps)[1])*100
+cat("There is a ", H3K27ac_proportion, "% overlap")
+
+H3K27me3_overlaps <- overlapsAny(peaks_p300, peaks_H3K27me3) 
+H3K27me3_proportion <- table(H3K27me3_overlaps)[2]/(table(H3K27me3_overlaps)[2]+ table(H3K27me3_overlaps)[1])*100
+cat("There is a ", H3K27me3_proportion, "% overlap")
+```
