@@ -1,0 +1,95 @@
+---
+title: "assignment"
+author: "Selina Joy Frei"
+date: "2024-03-22"
+output: html_document
+---
+
+Using the peaks you downloaded last week, identify bivalent domains (H3K27me3 + H3K4me3) in mouse embryonic stem cells (mESC):
+- Question: what happens to those regions upon differentiation?
+
+Choose one differentiated cell type (e.g. hepatocytes, neural progenitor, or smooth muscle cells):
+- Download the H3K27me3 and H3K4me3 peaks from this cell type
+- How many of the mESC bivalent domains are, in this differentiated cell type, overlapping either mark or their combination (in this differentiated cell type)?
+
+Don’t forget to upload your assignment as assignment.html
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(rtracklayer)
+  library(epiwraps)
+  library(GenomicRanges)
+})
+ah <- AnnotationHub()
+```
+
+#downloading the histone peaks
+```{r}
+dir.create("peaks")
+
+# H3K4me3
+download.file("https://www.encodeproject.org/files/ENCFF331RHM/@@download/ENCFF331RHM.bed.gz", dest="peaks/H3K4me3.bed.gz")
+
+peaks_H3K4me3 <- rtracklayer::import("peaks/H3K4me3.bed.gz",format="narrowPeak")
+
+# H3K27me3
+download.file("https://www.encodeproject.org/files/ENCFF105NKG/@@download/ENCFF105NKG.bed.gz", dest="peaks/H3K27me3.bed.gz")
+
+peaks_H3K27me3 <- rtracklayer::import("peaks/H3K27me3.bed.gz",format="narrowPeak")
+
+```
+
+#Using the peaks you downloaded last week, identify bivalent domains (H3K27me3 + H3K4me3) in mouse embryonic stem cells (mESC)
+
+```{r}
+bivalent_overlaps <- overlapsAny(peaks_H3K4me3, peaks_H3K27me3)
+bivalent_domains <- peaks_H3K4me3[bivalent_overlaps]
+# tells us exactly which 
+length(bivalent_domains)
+cat("There are" ,length(bivalent_domains), "overlaps of H3K4me3 with H3K27me3.")
+```
+
+##Question: what happens to those regions upon differentiation?
+
+```{r}
+
+# H3K4me3_hepatocytes
+download.file("https://www.encodeproject.org/files/ENCFF252RRE/@@download/ENCFF252RRE.bed.gz", dest="peaks/H3K4me3_hep.bed.gz")
+
+peaks_H3K4me3_Hep <- rtracklayer::import("peaks/H3K4me3_hep.bed.gz",format="narrowPeak")
+
+# H3K27me3_hepatocytes
+download.file("https://www.encodeproject.org/files/ENCFF290NCY/@@download/ENCFF290NCY.bed.gz", dest="peaks/H3K27me3_hep.bed.gz")
+
+peaks_H3K27me3_Hep <- rtracklayer::import("peaks/H3K27me3_hep.bed.gz",format="narrowPeak")
+
+```
+
+#How many of the mESC bivalent domains are, in this differentiated cell type, overlapping either mark or their combination (in this differentiated cell type)?
+```{r}
+# H3K4me3_hep
+bi_overlaps_h3k4me3_hep <- overlapsAny(bivalent_domains,peaks_H3K4me3_Hep) 
+bi_do_h3k4me3_hep <- bivalent_domains[bi_overlaps_h3k4me3_hep] #exact locations (peaks) where overlaps occur
+
+cat("There are" ,length(bi_do_h3k4me3_hep), "H3K4me3 peaks overlapping with the identified bivalent domains. " )
+
+# H3K27me3_hep
+bi_overlaps_H3K27me3_hep <- overlapsAny(bivalent_domains,peaks_H3K27me3_Hep) 
+bi_do_H3K27me3_hep <- bivalent_domains[bi_overlaps_H3K27me3_hep] #exact locations (peaks) where overlaps occur
+
+
+cat("There are" ,length(bi_do_H3K27me3_hep), "H3K27me3 peaks overlapping with the identified bivalent . " )
+```
+
+#or their combination (in this differentiated cell type)?
+```{r}
+bi_overlap_hep <- overlapsAny(peaks_H3K4me3_Hep, peaks_H3K27me3_Hep)
+bi_domain_hep <- peaks_H3K4me3_Hep[bi_overlap_hep]
+bi_overlaps_combi <- overlapsAny(bivalent_domains,bi_domain_hep)
+bi_domains_combi <- bivalent_domains[bi_overlaps_combi]
+
+cat("There are" ,length(bi_domains_combi), "H3K27me3 peaks overlapping with the identified bivalent . " )
+```
+#Interpretation
+# We have more H3K27me3 (repressive) overlaps with the bivalent domains than H3K4me3 (activating). I guess this might mean that there are less bivalent regions (or the bivalent regions change) the more differentiated the cells become since we need less flexibility (it is more clear what the function of the cell is and which genes it requires under which conditions). SO the bivalent regions that remain are really important for the hepatocytes whereas the other regions were only important for the flexibility of the stem cells. 
