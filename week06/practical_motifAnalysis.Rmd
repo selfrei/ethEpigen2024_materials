@@ -57,9 +57,10 @@ motifs <- query(MotifDb, "CTCF")
 # there are several matching motifs:
 names(motifs)
 # we select one:
-motif <- motifs[["Hsapiens-JASPAR_CORE-CTCF-MA0139.1"]]
+motif <- motifs[["Mmusculus-HOCOMOCOv10-CTCF_MOUSE.H10MO.A"]]
+motif
 # we visualize it:
-view_motifs(motif)
+view_motifs(motifs[1:2])
 ```
 
 
@@ -72,7 +73,8 @@ Biostrings::writeXStringSet(genome_seqs, "genome.fa")
 motif2 <- convert_motifs(motif, class="TFBSTools-PWMatrix")
 # if we had a list of motifs instead, we'd convert them like this:
 # motifs2 <- setNames(do.call(PWMatrixList, convert_motifs(motifs, class="TFBSTools-PWMatrix")), names(motifs))
-moi <- motifmatchr::matchMotifs(motif2, subject=peaks_chr1, genome=Rsamtools::FaFile("genome.fa"), out="positions")
+moi <- motifmatchr::matchMotifs(motif2, subject=peaks_chr1, genome=Rsamtools::FaFile("genome.fa"),
+                                out="positions") # specify that we want the function to return the genomic positions of each motif match
 moi <- moi[[1]] # we scanned for just one motif, so we get the results for that motif
 head(moi)
 ```
@@ -114,11 +116,13 @@ How far around depends on the resolution of your data, i.e. how narrow are your 
 The first thing we do, then, is to extract the regions around the peaks, and then obtain the sequence from those regions:
 
 ```{r}
+quantile(width(peaks_chr1))
 peak_centers <- resize(peaks_chr1, fix="center", width=100)
-
+quantile(width(peak_centers))
 # we get the sequences corresponding to the peak centers:
 peak_seqs <- memes::get_sequence(peak_centers, genome)
-# peak_seqs <- Biostrings::getSeq(genome, peak_centers)
+# or without the memes package:
+peak_seqs <- Biostrings::getSeq(genome, peak_centers)
 # names(peak_seqs) <- as.character(granges(peak_centers))
 peak_seqs
 as.character(peak_seqs[1])
@@ -147,10 +151,10 @@ ggplot(ame, aes(log2((1+tp)/(1+fp)), -log10(adj.pvalue), size=tp_percent)) +
 ## Example using PWMEnrich (much slower, but doesn't require memes)
 
 ```{r, eval=FALSE}
-# prepare multithreading:
+# prepare multithreading (works only on mac/linux):
 registerCoresPWMEnrich(4)
 # launch the analysis:
-res <- motifEnrichment(peak_seqs, convert_motifs(motifs, "PWMEnrich-PWM"))
+res <- PWMEnrich::motifEnrichment(peak_seqs, convert_motifs(motifs, "PWMEnrich-PWM"))
 # visualize:
 groupReport(res)
 ```
@@ -171,7 +175,7 @@ peak_seqs_subset <- head(peak_seqs,100)
 # this requires having the meme suite installed
 mr <- memes::runMeme( peak_seqs_subset, parse_genomic_coord = FALSE,
                       p=4, # use 4 threads
-                      nmotifs=5, # determines how many motifs Meme will try to find\
+                      nmotifs=5, # determines how many motifs Meme will try to find
                       meme_path = "~/meme/bin/") # depending on your setup, you might need to specify where the meme binaries were installed
 
 # we could also specify a background using the `neg` argument, i.e. instead of 
@@ -195,7 +199,10 @@ view_motifs(list(convert_motifs(motif), mr$motif[[1]]))
 ## Alterantive example using rGADEM (doesn't require installing the meme suite)
 
 ```{r, eval=FALSE}
-gadem <- rGADEM::GADEM(peak_seqs, genome=genome, nmotifs=5)
+library(rGADEM)
+gadem <- rGADEM::GADEM(peak_seqs_subset, genome=genome, nmotifs=3)
+view_motifs(motif)
+view_motifs(rGADEM::getPWM(gadem[[1]]))
 ```
 
 
