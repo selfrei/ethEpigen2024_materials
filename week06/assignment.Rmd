@@ -1,0 +1,90 @@
+---
+title: "Assignment week 6"
+author: "Selina Joy Frei"
+date: "2024-04-15"
+output: html_document
+---
+Choose a transcription factor, e.g. CREB1, REST, GATA5, EGR1, GCR (or any of your choice that has a motif and available ChIPseq data)
+Download the (e.g. Mouse) peaks for that factor (in whatever cell type)
+Identify the instances of the factor's motif
+Answer the following questions:
+Of all the peaks, what proportion contains a motif for the factor?
+Expected form of an answer: of the XX peaks, XX (XX%) contain a motif
+Of all instances of that motif in the genome (or in one chromosome), what proportion is bound by the factor (i.e. has a peak)?
+Expected form of an answer: of the XX motif instances, XX (XX%) overlap a peak
+
+```{r}
+suppressPackageStartupMessages({
+  library(AnnotationHub)
+  library(ensembldb) 
+  library(GenomicRanges)
+  library(ggplot2)
+  library(memes) # for the meme-based methods -- COMMENT OUT when using alternatives
+  library(motifmatchr) # for scanning sequences for matches of given motifs
+  library(Biostrings) # for handling sequences
+  library(MotifDb) # database of motifs
+  library(TFBSTools) # for handling some motif formats
+  library(universalmotif) # for converting motifs to various formats
+  library(PWMEnrich) # for R-based motif enrichment analysis
+})
+ah <- AnnotationHub()
+```
+# Download peaks for EGR1
+```{r}
+dir.create("peaks")
+
+# EGR1 ChIPSeq 
+download.file("https://www.encodeproject.org/files/ENCFF472DCD/@@download/ENCFF472DCD.bed.gz", dest="peaks/JUN.bed.gz")
+
+peaks_JUN <- rtracklayer::import("peaks/JUN.bed.gz",format="narrowPeak")
+seqlevelsStyle(peaks_JUN) <- "Ensembl"  # to change the convention of the chromosome names to ensembl (i.e. without 'chr')
+peaks_JUN_chr1 <- peaks_JUN[seqnames(peaks_JUN)=="1"] #TAKE ONLY First chromosone such that it's quicker
+```
+
+# Get genome sequence 
+```{r}
+#q <- query(ah, c("Homo sapiens", "EnsDb"))
+#q$genome
+## The upper command for some reason is not working anymore for me.
+which(ah$species=="Mus musculus" & ah$dataprovider=="Ensembl"& ah$rdataclass=="TwoBitFile")
+genome <- ah[["AH68356"]]
+# we'll load it into memory:
+genome_seqs <- import(genome)
+```
+
+# Find motifs for JUN --> choose 1
+```{r}
+# we search for "JUN" in the motif database
+motifs <- query(MotifDb, "JUN")
+# there are several matching motifs:
+names(motifs)
+# we select the first one:
+motif <- motifs[["Mmusculus-cisbp_1.02-M0311_1.02"]]
+motif
+```
+
+# How many cHip-Seq peaks contaim JUN motif?
+```{r}
+# Convert motif into compatible format
+Biostrings::writeXStringSet(genome_seqs, "genome.fa")
+motif2 <- convert_motifs(motif, class="TFBSTools-PWMatrix")
+
+moi <- motifmatchr::matchMotifs(motif2, subject=peaks_JUN_chr1, genome=Rsamtools::FaFile("genome.fa"),
+                                out="positions")
+moi_overlaps <- table(overlapsAny(peaks_JUN_chr1, moi))
+
+cat("Of the"  ,length(peaks_JUN_chr1), "peaks,", moi_overlaps[2]/length(peaks_JUN_chr1)*100, "% contain a motif")
+```
+
+#Of all instances of that motif in the genome (or in one chromosome), what proportion is bound by the factor (i.e. has a peak)?
+```{r}
+# Find all motifs in genome
+motif_JUN_across_genome <- motifmatchr::matchMotifs(motif2, subject=genome_seqs, out="positions")[[1]]
+names(motif_JUN_across_genome) <- names(genome_seqs)
+motif_JUN_across_genome <- as(motif_JUN_across_genome, "GRanges")
+TF_overlaps <- table(overlapsAny(motif_JUN_across_genome,peaks_JUN))
+# How many motifs of interest (moi) overlap with our peaks`?
+
+cat("Of the", length(motif_JUN_across_genome), "motif instances,"  ,TF_overlaps[2]/length(motif_JUN_across_genome)*100, "% overlap a peak")
+```
+of the XX motif instances, XX (XX%) overlap a peak
