@@ -63,7 +63,10 @@ bam2bw(bam, output_bw = "mono_cov.bw", paired=TRUE, binWidth=10L, minFragLength=
 
 # create a track using only the (10bp) centers of mono-nucleosome fragments
 bam2bw(bam, output_bw = "mono_centers.bw", paired=TRUE, binWidth=5L, minFragLength=140, shift=c(4L,-5L), 
-       maxFragLength=220, type="center", extent=10L, forceSeqlevelsStyle = "Ensembl")
+       maxFragLength=220, type="center", extend=10L, forceSeqlevelsStyle = "Ensembl")
+
+
+list.files()
 ```
 
 
@@ -101,18 +104,14 @@ sm <- signal2Matrix(tracks, moi, w=5, extend=300)
 # plot the signals:
 plotEnrichedHeatmaps(sm, trim=0.95)
 
-# we renormalize using border backgrounds
-sm <- renormalizeSignalMatrices(sm)
-plotEnrichedHeatmaps(smb, trim=0.95, colors = c("white","darkred"), minRowVal = 10)
-
 # the right to do this, however, is using a background normalization
 # this we can do for instance using:
 nf <- getNormFactors(tracks, useSeqLevels="19", nwind=5000L)
 # then we apply the normalization factors:
 sm <- renormalizeSignalMatrices(sm, scaleFactors = nf)
 # we subset to the top 1000 regions:
-sm.top <- head(sm[order(rowMeans(as.matrix(assays(sm)$enriched_score))),], 500)
-plotEnrichedHeatmaps(sm.top, trim=0.95, minRowVal = 12, colors = c("white","darkred"))
+# sm.top <- head(sm[order(rowMeans(as.matrix(assays(sm)$enriched_score))),], 500)
+plotEnrichedHeatmaps(sm, trim=0.95, minRowVal = 12, colors = c("white","darkred"))
 ```
 
 
@@ -141,9 +140,9 @@ We could also look at the pattern around the TSS
 txs <- transcripts(ensdb, filter=TxBiotypeFilter("protein_coding"))
 txs <- txs[seqnames(txs)=="19"]
 tss <- promoters(txs, upstream=0, downstream=1)
-tss.sm <- signal2Matrix(tracks, granges(tss), w=10, extend=1000)
-tss.sm <- renormalizeSignalMatrices(tss.sm, scaleFactors = nf)
-plotEnrichedHeatmaps(tss.sm, trim=0.95, colors=c("white","darkred"))
+tss.sm <- epiwraps::signal2Matrix(tracks, granges(tss), w=10, extend=1000)
+tss.sm <- epiwraps::renormalizeSignalMatrices(tss.sm, scaleFactors = nf)
+epiwraps::plotEnrichedHeatmaps(tss.sm, trim=0.95, colors=c("white","darkred"))
 ```
 
 
