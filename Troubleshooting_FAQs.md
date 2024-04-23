@@ -2,7 +2,7 @@
 
 This is a list of some technical errors people often encounter, especially when trying to set-up the environment.
 
-## Error: “the package XXX is not available”
+## Error: "the package XXX is not available"
 Unless specified otherwise, always install packages using `BiocManager::install("packagename")` instead of using `install.packages` .
 
 ## Error: Rtools is required to build R packages but is not currently installed
@@ -13,7 +13,7 @@ In Rmarkdown document, all filepaths are relative to the document itself. This m
 To avoid discrepancy between the current working directory in your Rstudio environment and that of the markdown, when you have your markdown open in Rstudio it's a good idea to do, from the top menu: Session -> Set Working Directory -> To Source File Location
 (That will set the working directory of your R session to the directory containing the markdown, so that paths that work interactively will also work when knitting)
 
-## Error: …. Permission denied (typically windows users): 
+## Error: ... Permission denied (typically windows users): 
 1. Most likely this is happening because you said yes ("all") to the question of whether or not to update other packages than the one you were trying to install. An easy way out (though not a solution in the long term) is simply not to do so.
 Alternatively:
 1. Run Rstudio / IDE as an Administrator
@@ -21,3 +21,8 @@ Alternatively:
 => then restart session and install packages needed
 
 If it's about rlang and it still doesn’t work => install from source in the fresh session: install.packages("rlang", type = "source")
+
+## With the same code, heatmaps look uglier than in class
+You probably are also having a message that you should install the `magick` R package. Just install that package, 
+(When plotting heatmaps with more data points than there are pixels to display them, the matrix needs to be rasterized and shrinked. The best way to do this is to use the imagemagick image manipulation library, which will be used if available. If not, some lousy alternative gets used instead.)
+
