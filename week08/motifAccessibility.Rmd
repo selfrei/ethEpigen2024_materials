@@ -1,0 +1,143 @@
+---
+title: "ATAC-seq exploration practical"
+author: "Pierre-Luc"
+date: "2023/04/21"
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(epiwraps)
+  library(motifmatchr)
+  library(MotifDb)
+  library(universalmotif)
+  library(ggplot2)
+  library(SummarizedExperiment) # data structure
+  library(sechm) # for plotting heatmaps from a SummrizedExperiment
+  library(BiocParallel) # for multithreading
+  library(chromVAR) # for motif accessibility estimation
+  library(limma) # for statistical analysis
+})
+# to control multithreading, unix users can use:
+register(MulticoreParam(4))
+# for windows users, rather one of the following:
+# register(SerialParam())
+# register(SnowParam(2))
+```
+
+
+## Download the data
+
+```{r, eval=FALSE}
+options(timeout=6000)
+download.file("https://ethz-ins.org/content/dex.chr1.zip", "dex.chr1.zip", mode="wb")
+unzip("dex.chr1.zip")
+# if you don't have the human genome yet, we download chr1:
+download.file("https://ethz-ins.org/content/hg38.chr1.zip", "hg38.chr1.zip", mode="wb")
+unzip("hg38.chr1.zip")
+```
+
+## Get the database of motifs
+
+```{r}
+motifs <- query(MotifDb, c("HOCOMOCOv11-core", "Hsapiens"))
+# convert to a format motifmatchr can use, and use the gene symbols as names
+motifs <- do.call(TFBSTools::PWMatrixList, setNames(
+           universalmotif::convert_motifs(motifs, class="TFBSTools-PWMatrix"),
+           mcols(motifs)$geneSymbol))
+```
+
+
+```{r}
+# preparing the genome sequence file (here just using a subset)
+genome <- Rsamtools::FaFile("hg38.chr1.fa")
+```
+
+1. get the fragment counts for each peak in each sample
+  --> add GC bias
+2. get the occurence of each motif in each peak 
+3. use 1 and 2 to obtain aggregated motif score per sample
+
+```{r}
+# get a list of the bam files for the different samples
+bams <- list.files(pattern="bam$")
+names(bams) <- gsub("\\.bam","",bams)
+bams
+```
+
+```{r}
+# get the peaks
+peak <- rtracklayer::import("peaks.narrowPeak")
+# we need to resize the peaks so that they all have a comparable size
+peak <- resize(peak,300,fix="center")
+se <- chromVAR::getCounts(alignment_files = bams, peaks = peak, paired = FALSE)
+
+se
+colData(se)$condition <- c("CTRL","CTRL","DEX","DEX")
+# this would do the same:
+se$condition <- c("CTRL","CTRL","DEX","DEX")
+colData(se)
+rowRanges(se)$test <- 3
+rowRanges(se)
+
+# fetch an assay, all equivalent in this case:
+head(assay(se)) # if I want the first
+head(assays(se)$counts)
+head(assay(se, "counts"))
+```
+
+We had the GC concentration in each peak:
+
+```{r}
+se <- chromVAR::addGCBias(se, genome=genome)
+```
+
+```{r}
+# we find which peaks contain which motifs
+# we don't use `out="positions"` here
+moi <- motifmatchr::matchMotifs(motifs, subject=se, genome=genome)
+
+# for each peak, we identify similar peaks as background
+bg <- chromVAR::getBackgroundPeaks(se, niterations=1000)
+# for each motif, we computed per-sample deviations relative to the background
+dev <- chromVAR::computeDeviations(object = se, annotations=moi,
+                                   background_peaks=bg)
+dev
+colData(dev)
+```
+
+```{r}
+head(assays(dev)$z)
+```
+
+# Differential analysis
+
+```{r}
+dev$condition
+# if needed, we can specify the baseline condition, by default it's the first in alphabetical order
+dev$condition <- factor(dev$condition)
+dev$condition <- relevel(dev$condition, "CTRL")
+mm <- model.matrix(~dev$condition)
+# equivalent:
+mm <- model.matrix(~condition, data=as.data.frame(colData(dev)))
+mm
+```
+
+```{r}
+fit <- eBayes(lmFit(assays(dev)$z, mm))
+res <- as.data.frame(topTable(fit, coef="conditionDEX", number = Inf))
+head(res)
+
+res$TF <- row.names(res)
+ggplot(res, aes(logFC, -log10(adj.P.Val), label=TF)) + geom_text() 
+```
+
+```{r}
+sechm(dev, features = head(row.names(res)), assayName="z", top_annotation = c("condition", "depth"))
+```
+
+
+```{r}
+view_motifs(motifs[c("GCR","PRGR")])
+```
+
