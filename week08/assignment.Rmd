@@ -1,0 +1,171 @@
+---
+title: "Assingment Week 8"
+author: "Selina Joy Frei"
+date: "2024-04-28"
+output: html_document
+---
+
+Download ATAC-seq peak counts in the hippocampus upon stress (subset of the original data, already in SummarizedExperiment format) :
+https://ethz-ins.org/content/mouse_mm38_hippocampus.peakCounts.SE.rds
+Using this object, perform a chromVAR motif analysis, and run 2 differential motif accessibility analyses, respectively:
+comparing stressed (denoted ‘FSS’ – forced swim stress) and control animals
+comparing male and female animals
+For each analysis, report the top most significant motifs, plot a heatmap of the normalized accessibility scores across the samples for those motifs, and write a short paragraph interpreting the results.
+
+```{r}
+suppressPackageStartupMessages({
+  library(epiwraps)
+  library(motifmatchr)
+  library(MotifDb)
+  library(universalmotif)
+  library(ggplot2)
+  library(SummarizedExperiment) # data structure
+  library(sechm) # for plotting heatmaps from a SummrizedExperiment
+  library(BiocParallel) # for multithreading
+  library(chromVAR) # for motif accessibility estimation
+  library(limma) # for statistical analysis
+})
+BiocManager::install(("chromVAR"))
+# to control multithreading, unix users can use:
+register(MulticoreParam(4)) # paralellization
+# for windows users, rather one of the following:
+# register(SerialParam())
+# register(SnowParam(2))
+
+```
+
+Download peaks
+
+```{r, eval=FALSE}
+options(timeout=6000)
+download.file("https://ethz-ins.org/content/mouse_mm38_hippocampus.peakCounts.SE.rds", destfile = "mouse_mm38_hippocampus.peakCounts.SE.rds", mode="wb")
+se <- readRDS("/mnt/gapp/work/selina/Epigenomics course/Week 8/mouse_mm38_hippocampus.peakCounts.SE.rds")
+```
+
+Download all motifs
+## Get the database of motifs
+
+```{r}
+# this time we look at a range of motifs not just one motif
+motifs <- query(MotifDb, "Mus")
+# convert to a format motifmatchr can use, and use the gene symbols as names
+motifs <- do.call(TFBSTools::PWMatrixList, setNames(
+           universalmotif::convert_motifs(motifs, class="TFBSTools-PWMatrix"),
+           mcols(motifs)$geneSymbol))
+```
+
+
+```{r}
+# preparing the genome sequence file
+# get mouse genome
+dir.create("genome")
+ah <- AnnotationHub()
+genome <- ah[["AH68356"]]
+# we'll load it into memory:
+genome_seqs <- import(genome)
+Biostrings::writeXStringSet(genome_seqs, "genome.fa")
+# preparing the genome sequence file (here just using a subset)
+genome_fa <- Rsamtools::FaFile("genome.fa")
+```
+
+Add GC bias
+```{r}
+se <- chromVAR::addGCBias(se, genome=genome_fa)
+```
+
+Motifmatch + deviation calculation
+```{r}
+# we find which peaks contain which motifs
+moi <- motifmatchr::matchMotifs(motifs, subject=se, genome=genome_fa) 
+moi
+
+assay(se) <- as.matrix(assay(se))
+# for each peak, we identify similar peaks as background
+
+bg <- chromVAR::getBackgroundPeaks(object=as.matrix(assays(se)$counts), niterations=1000, bias=rowData(se)$bias)
+# for each motif, we computed per-sample deviations relative to the background
+dev <- chromVAR::computeDeviations(object =as.matrix(assays(se)$counts), annotations=as.matrix(assay(moi)),
+                                   background_peaks=bg) #each of the rows is a motif -> relative score for acessability
+head(assay(dev))
+
+
+colData(dev)$condition <- c(rep("CTRL",6), rep("FSS",6))
+colData(dev)$sex <- c(rep("f",3), rep("m",3),rep("f",3), rep("m",3))
+colData(dev) 
+head(assays(dev)$z)
+```
+
+# Differential analysis for condition
+
+# linear model --> t-test is equivalent to fitting a linear model 
+# test if slope is significantly different from 0 which is equivalent to checking if there is a difference between the groups
+# add covariate e.g. batch to track batch effects in linear models --> we couldn't do this in a t.test. Linear models are more flexible in that manner.
+
+
+```{r}
+dev$condition
+dev$sex
+
+mm <- model.matrix(~condition + sex, data=as.data.frame(colData(dev))) # specify that we use condition as model matrix
+# equivalent:
+
+```
+```{r}
+fit <- eBayes(lmFit(assays(dev)$z, mm)) 
+
+#FSS vs CTRL
+res_stress <- as.data.frame(limma::topTable(fit, coef="conditionFSS", number = Inf)) #specify which coefficient we want to test
+head(res_stress)
+dim(res_stress)
+res_stress$TF <- row.names(res_stress)
+res_stress <- res_stress[!duplicated(res_stress$ID), ]#gets rid of duplicates
+row.names(res_stress) <- res_stress$ID
+
+ggplot(res_stress, aes(logFC, -log10(adj.P.Val), label=TF)) + geom_text() 
+library(dplyr)
+significant_motifs <- res_stress %>%
+  filter(adj.P.Val < 0.05) %>%   # Filtering for significance
+  arrange(adj.P.Val) 
+head(significant_motifs, 6) #The most significant motifs
+
+sechm(dev, features = head(row.names(res_stress)), assayName="z", breaks = 1) #gives us z-score of significant motifs for the two different conditions: CTRL and FSS --> the stressed animals show a higher z-score -> higher acessability for stressed animals in males
+
+cat("The most significant motifs when comparing FFS vs CTRL are", row.names(significant_motifs))
+
+#Interpretation:
+#The TF whose motifs are significantly changed must be somehow involved in the stress response. For instance, NR3C1 corresponds to the glucocorticoid receptor, which gets activated during stress response upon cortisol secretion. 
+```
+
+```{r}
+#Male vs Female
+res_sex <- as.data.frame(limma::topTable(fit, coef="sexm", number = Inf)) #specify which coefficient we want to test
+head(res_sex)
+dim(res_sex)
+res_sex$TF <- row.names(res_sex)
+res_sex <- res_sex[!duplicated(res_sex$ID), ]#gets rid of duplicates
+row.names(res_sex) <- res_sex$ID
+
+ggplot(res_sex, aes(logFC, -log10(adj.P.Val), label=TF)) + geom_text() 
+# Filtering for significance
+library(dplyr)
+significant_motifs_sex <- res_sex %>%
+  filter(adj.P.Val < 0.05) %>%  
+  arrange(adj.P.Val) 
+head(significant_motifs_sex, 6) 
+
+sex_annotation <- colData(dev)$sex  # 'sex' should be a column indicating 'male' or 'female'
+
+# Prepare the annotation as a factor to color code it
+sex_annotation_factor <- factor(sex_annotation, levels = c("male", "female"))
+col_annotation <- HeatmapAnnotation(
+    sex = sex_annotation_factor,
+    col = list(sex = c(male = "lightblue", female = "pink"))  # You can choose your colors
+)
+sechm(dev, features = head(row.names(res_sex)), assayName="z", top_annotation = c("depth", "sex"), breaks = 1) #gives us z-score of different motifs for male vs female and for the two conditions (CTRL - FSS) --> males show a higher z-score than females --> higher acessability for the listed motifs in males
+
+cat("The most significant motifs when comparing males vs females are", row.names(significant_motifs_sex))
+
+#Interpretation
+# The most significantly changed motifs must somehow be sex-specific. Maybe they are downstream of some sex-specific hormones? It is telling us that there are general differences in sexes, which we might have to consider if we mixed males and females for control and stressed animals. So maybe it would be worth looking at males and females separately to uncover some differences in stressed and ctrl animals which were overshadowed by differences between the males and females of the respective conditions. 
+```
+
