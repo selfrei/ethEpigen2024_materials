@@ -18,10 +18,11 @@ suppressPackageStartupMessages({
   library(chromVAR) # for motif accessibility estimation
   library(limma) # for statistical analysis
 })
+
 # to control multithreading, unix users can use:
 register(MulticoreParam(4))
 # for windows users, rather one of the following:
-# register(SerialParam())
+# register(SerialParam()) # this will disable multi-threading
 # register(SnowParam(2))
 ```
 
@@ -45,12 +46,14 @@ motifs <- query(MotifDb, c("HOCOMOCOv11-core", "Hsapiens"))
 motifs <- do.call(TFBSTools::PWMatrixList, setNames(
            universalmotif::convert_motifs(motifs, class="TFBSTools-PWMatrix"),
            mcols(motifs)$geneSymbol))
+motifs
 ```
 
 
 ```{r}
 # preparing the genome sequence file (here just using a subset)
 genome <- Rsamtools::FaFile("hg38.chr1.fa")
+#Rsamtools::indexFa("hg38.chr1.fa")
 ```
 
 1. get the fragment counts for each peak in each sample
@@ -68,17 +71,23 @@ bams
 ```{r}
 # get the peaks
 peak <- rtracklayer::import("peaks.narrowPeak")
+hist(width(peak))
 # we need to resize the peaks so that they all have a comparable size
-peak <- resize(peak,300,fix="center")
+peak <- resize(peak, width=300, fix="center")
+quantile(width(peak))
+
 se <- chromVAR::getCounts(alignment_files = bams, peaks = peak, paired = FALSE)
 
 se
+
 colData(se)$condition <- c("CTRL","CTRL","DEX","DEX")
 # this would do the same:
 se$condition <- c("CTRL","CTRL","DEX","DEX")
 colData(se)
 rowRanges(se)$test <- 3
 rowRanges(se)
+rowData(se)
+row.names(se) <- as.character(granges(se))
 
 # fetch an assay, all equivalent in this case:
 head(assay(se)) # if I want the first
@@ -90,19 +99,25 @@ We had the GC concentration in each peak:
 
 ```{r}
 se <- chromVAR::addGCBias(se, genome=genome)
+rowData(se)
+hist(rowData(se)$bias)
 ```
 
 ```{r}
 # we find which peaks contain which motifs
 # we don't use `out="positions"` here
 moi <- motifmatchr::matchMotifs(motifs, subject=se, genome=genome)
+head(assay(moi))
 
+# ensure reproducibility
+set.seed(1234)
 # for each peak, we identify similar peaks as background
 bg <- chromVAR::getBackgroundPeaks(se, niterations=1000)
 # for each motif, we computed per-sample deviations relative to the background
 dev <- chromVAR::computeDeviations(object = se, annotations=moi,
                                    background_peaks=bg)
 dev
+head(assay(dev))
 colData(dev)
 ```
 
@@ -116,24 +131,30 @@ head(assays(dev)$z)
 dev$condition
 # if needed, we can specify the baseline condition, by default it's the first in alphabetical order
 dev$condition <- factor(dev$condition)
+dev$condition
 dev$condition <- relevel(dev$condition, "CTRL")
 mm <- model.matrix(~dev$condition)
+head(mm)
 # equivalent:
 mm <- model.matrix(~condition, data=as.data.frame(colData(dev)))
 mm
 ```
 
 ```{r}
-fit <- eBayes(lmFit(assays(dev)$z, mm))
-res <- as.data.frame(topTable(fit, coef="conditionDEX", number = Inf))
+fit <- limma::eBayes(limma::lmFit(object = assays(dev)$z, design = mm))
+# we select, from the columns of model.matrix `mm`, the coefficient we want to test:
+res <- as.data.frame(limma::topTable(fit, coef="conditionDEX", number = Inf))
 head(res)
-
+dim(res)
 res$TF <- row.names(res)
-ggplot(res, aes(logFC, -log10(adj.P.Val), label=TF)) + geom_text() 
+ggplot(res, aes(logFC, -log10(adj.P.Val), label=TF)) + geom_text()
+
+head(dev)
 ```
 
 ```{r}
-sechm(dev, features = head(row.names(res)), assayName="z", top_annotation = c("condition", "depth"))
+metadata(dev)$anno_colors <- list(condition=c(CTRL="lightgrey", DEX="darkred"))
+sechm::sechm(dev, features = head(row.names(res)), assayName="z", top_annotation = c("condition", "depth"))
 ```
 
 
