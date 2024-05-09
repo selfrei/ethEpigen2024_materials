@@ -1,0 +1,41 @@
+---
+title: "Assignment Week 9"
+author: "Selina Joy Frei"
+date: "2024-05-09"
+output: html_document
+---
+
+```{r}
+#What is the topic?
+#Given our interest in the glucocorticoid receptor (GR), we seek to identify diverse approaches for examining genomic alterations that are GR-dependent. Two prevalent methodologies for investigating genomic changes are ATAC-Seq and H3K27ac ChIP-Seq. ATAC-Seq elucidates alterations in chromatin accessibility. This is to be expected, given that when GR becomes activated by Dex binding, it binds to the DNA, thereby occupying a part of the chromatin that was previously accessible. This change in accessibility profile is therefore to be expected. H3K27ac is a marker for active enhancers. Upon GR activation, it is to be expected that it will bind to the DNA and lead to active transcription, thereby changing the H3K27ac profile of GR-responding/-dependent enhancers. 
+#The objective of this study is to determine whether H3K27ac provides more accurate results in the analysis of GR-mediated chromatin changes compared to ATAC-Seq. To achieve this, it is necessary to induce GR-dependent changes in the genome. This can be achieved by treating cells with a GR agonist, dexamethasone. Upon dexamethasone binding to GR, the receptor becomes activated and translocates to the nucleus, where it binds to the DNA. The Reddy laboratory has conducted numerous experiments to achieve this objective. A549 cells were treated for 0, 1, 4, and 8 hours with dexamethasone, and for each time point, ATAC-Seq, H3K27ac ChIP-Seq, and GR ChIP-Seq + DNase-seq were performed.  GR ChIP-Seq serves as a control since it allows us to ascertain precisely where in the genome we anticipate observing changes. We also employ DNase-seq to mitigate the effects of saturation in the ATAC-Seq. If we observe an increase in peaks in the DNase-seq, it indicates that the ATAC signal is saturated, whereas if we observe the same peaks, it suggests that accessibility is saturated. In essence, DNase-seq serves as an additional control for GR-mediated changes, given that GR has been demonstrated to bind predominantly to sites with high DNase-seq accessibility.
+# (John et al. 2008, 2011). 
+
+#What data will you be using?
+#As mentioned we use data from the Reddy lab:
+#-
+# https://pubmed.ncbi.nlm.nih.gov/30097539/
+# → Pierre-Luc downloaded the data for us
+
+
+#What are the analyses you wish to reproduce, or the questions you wish to answer?
+#Key Question: Whether we see more genuine changes in H3K27ac than in ATAC upon GR activation by Dex → The following steps are performed to answer this key question
+
+#→ Peak calling for for the different timepoints
+#→ H3K27ac-Chip seq: Where do we find an enrichment of H3K27ac in the genome 
+#→ ATAC-seq: Where do we find more open/accessible chromatin 
+#	→ also look at DNase-seq peaks as a control for ATAC-seq
+#→ GR Chip seq: Where do we find an enrichment of GR in the genome 
+#Overlay GR ChIP-Seq peaks on ATAC-Seq and H3K27ac ChIP-Seq peaks to pinpoint GR-dependent alterations.
+
+#→ Motif analysis for the GR data sets and timepoints: 
+#Download the peaks for GR(already done in “peak calling step”)
+#Identify the instances of the factor’s (GR) motif in peaks
+
+#→ Motif enrichment analysis between ATAC - GR and H3K27ac - GR 
+#	→ Of all the peaks (of ATAC/H3K27ac/GR data), what proportion contains a motif for the TF GR?
+
+#	→ Plot a heatmap for each timepoint → Compare where we have a stronger overlap in signal (visually)
+#
+```
+
