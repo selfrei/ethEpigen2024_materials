@@ -65,7 +65,7 @@ bwfiles <- list.files("tracks", full.names = TRUE)
 # then give them meaningful names
 names(bwfiles) <- gsub("\\.bw","",basename(bwfiles))
 
-sm <- signal2Matrix(bwfiles, regions=peaks$p300, w=40)
+sm <- signal2Matrix(bwfiles, regions=pp, w=50)
 # we could plot them all on separate scales:
 plotEnrichedHeatmaps(sm, trim = 0.95, multiScale = TRUE)
 # when doing that it can also help to use different colors, e.g.:
@@ -75,7 +75,10 @@ plotEnrichedHeatmaps(sm, trim = 0.95, multiScale = TRUE,
 ```
 
 ```{r}
-plotEnrichedHeatmaps(sm, trim = 0.7)
+sm2 <- sm[,c(1,4,5)]
+
+sm2 <- renormalizeSignalMatrices(sm2, method="top")
+plotEnrichedHeatmaps(sm2, cluster_rows = "sort", scale_rows = TRUE, colors = c("white","darkblue"), use_raster=TRUE)
 plotEnrichedHeatmaps(sm[,6])
 ```
 

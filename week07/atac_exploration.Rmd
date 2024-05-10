@@ -146,4 +146,24 @@ epiwraps::plotEnrichedHeatmaps(tss.sm, trim=0.95, colors=c("white","darkred"))
 ```
 
 
+```{r, fig.width=8, fig.height=4.2}
+f <- function(motif){
+  motif2 <- convert_motifs(motif, class="TFBSTools-PFMatrix")
+  moi <- motifmatchr::matchMotifs(motif2, chr19, out="positions", p.cutoff=1e-5)[[1]]
+  moi <- as(setNames(moi,names(chr19)), "GRanges")
+  sm <- signal2Matrix(tracks, moi, w=5, extend=500, binMethod = "mean")
+  sm <- renormalizeSignalMatrices(sm, scaleFactors = nf)
+  meltSignals(sm)
+}
+
+motifs <- list(
+  Ctcf=MotifDb::query(MotifDb, c("CTCF","MOUSE"))[[1]],
+  Foxd3=MotifDb::query(MotifDb, c("HOCOMOCOv10","FOXD3"))[[1]],
+  Klf4=MotifDb::query(MotifDb, c("HOCOMOCOv10","KLF4"))[[1]]
+  )
+view_motifs(lapply(motifs,convert_motifs))
+d <- dplyr::bind_rows(lapply(motifs, FUN=f), .id="motif")
+ggplot(dr, aes(position, mean, colour=sample)) + geom_line(size=1.2) +
+  facet_grid(sample~motif, scales = "free_y") + theme_bw()
+```
 
