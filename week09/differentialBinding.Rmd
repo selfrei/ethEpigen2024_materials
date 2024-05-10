@@ -8,7 +8,7 @@ suppressPackageStartupMessages({
   library(GenomicRanges)
   library(chromVAR)
   library(SummarizedExperiment)
-  library(edgeR)
+  library(edgeR) # differential gene expression using neg.bin stats
   library(epiwraps)
   library(ggplot2)
 })
@@ -20,7 +20,7 @@ Here we'll work with only a subset of the data from the GDVS paper, namely the C
 ## Downloading the data
 
 ```{r, eval=FALSE}
-options(timeout=)
+options(timeout=3600)
 download.file("https://ethz-ins.org/content/yy1.chr9.zip", "yy1.chr9.zip", mode="wb")
 unzip("yy1.chr9.zip")
 ```
@@ -32,8 +32,9 @@ unzip("yy1.chr9.zip")
 peaks <- list.files("peaks",full=TRUE)
 names(peaks) <- gsub("\\.narrowPeak","",basename(peaks))
 peaks <- lapply(peaks, FUN=rtracklayer::import)
-
+head(peaks[[1]])
 merged_peaks <- reduce(unlist(GRangesList(peaks)))
+head(merged_peaks)
 ```
 
 Note that a good alternative to get consensus peaks across samples is to merge the reads from all samples, and call peaks on that.
@@ -46,17 +47,20 @@ se <- chromVAR::getCounts(bams, peaks=merged_peaks, paired=FALSE)
 colnames(se) <- gsub("\\.bam","",basename(bams))
 # we set the conditions:
 se$condition <- c("CTRL","CTRL","DEL","DEL")
+se
 ```
 
 ## Standard differential analysis with edgeR
 
 ```{r}
+# we need names to the regions:
 row.names(se) <- as.character(granges(se))
-dds <- DGEList(assay(se), group=se$condition)
-dds <- calcNormFactors(dds)
-dds <- estimateDisp(dds)
+dds <- edgeR::DGEList(assay(se), group=se$condition)
+dds <- edgeR::calcNormFactors(dds)
+dds <- edgeR::estimateDisp(dds)
 
 et <- as.data.frame(topTags(exactTest(dds), Inf))
+head(et)
 
 # # note that we could use the formula interface to specify the model:
 # mm <- model.matrix(~condition, data=as.data.frame(colData(se)))
@@ -86,6 +90,7 @@ If you think back to the biology of the dataset we are analyzing, does anything 
 ### Normalization based on library size
 
 ```{r}
+dds$samples$lib.size <- se$depth
 dds$samples$norm.factors <- 1
 dds <- estimateDisp(dds)
 et <- as.data.frame(topTags(exactTest(dds), Inf))
@@ -95,9 +100,9 @@ ggplot(et, aes(logFC, -log10(FDR))) + geom_point()
 ### Normalization based on common peaks
 
 ```{r}
-nf.ma <- getNormFactors(bams, peaks=peaks, method="MAnorm")
+nf.ma <- epiwraps::getNormFactors(bams, peaks=peaks, method="MAnorm")
 dds$samples$norm.factors <- nf.ma
-dds$samples$lib.size <- 1
+dds$samples$lib.size <- 1 # so that edgeR doesn't do extra libsize normalization
 dds <- estimateDisp(dds)
 et <- as.data.frame(topTags(exactTest(dds), Inf))
 ggplot(et, aes(logFC, -log10(FDR))) + geom_point()
@@ -125,9 +130,8 @@ ggplot(et, aes(logFC, -log10(FDR))) + geom_point()
 tracks <- list.files("tracks/", full=TRUE)
 tracks
 sm <- signal2Matrix(tracks, rowRanges(se))
-nf <- getNormFactors(tracks)
-nf.ma <- getNormFactors(tracks, peaks = peaks, method = "MAnorm")
-sm <- renormalizeSignalMatrices(sm, scaleFactors=nf.ma)
+
+sm <- renormalizeSignalMatrices(sm, scaleFactors=nf.bg)
 plotEnrichedHeatmaps(sm, row_title="All chr9 Yy1 peaks")
 
 # just the 20 most significant regions
