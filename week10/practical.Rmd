@@ -36,6 +36,8 @@ regions <- rtracklayer::import.bed("regions.bed")
 ```{r}
 ese <- signal2Matrix(tracks, regions, extend=2000)
 plotEnrichedHeatmaps(ese)
+ese2 <- ese[1:1000,]
+plotEnrichedHeatmaps(ese2, cluster_rows = TRUE, show_row_dend=TRUE )
 ```
 
 ## Clustering
@@ -48,19 +50,22 @@ head(cl)
 length(cl)
 length(regions)
 
+# to make sure the cluster labels stay associated with the corresponding regions/rows
+# even if we manipulate the object, put them inside the rowData of the object:
 rowData(ese)$cluster <- cl
+head(rowData(ese))
 ```
+
+
+
+
 
 Plotting the clusters:
 
 ```{r}
-plotEnrichedHeatmaps(ese, row_split="cluster", trim=0.99,
+#plotEnrichedHeatmaps(ese, row_split="cluster", colors=c("white","darkred"))
+plotEnrichedHeatmaps(ese, row_split=rowData(ese)$cluster, 
                      colors=c("white","darkred"))
-```
-
-```{r}
-cl2 <- clusterSignalMatrices(ese, k=2:10)
-ggplot(cl2$varExplained, aes(k, varExplained)) + geom_line()
 ```
 
 
@@ -72,6 +77,17 @@ mycolors <- c("1"="red", "2"="blue", "3"="darkgreen", "4"="black")
 plotEnrichedHeatmaps(ese, row_split="cluster", mean_color=mycolors, colors=c("white","darkred"))
 ```
 
+
+Trying different numbers of clusters:
+
+
+```{r}
+cl2 <- clusterSignalMatrices(ese, k=2:10)
+ggplot(cl2$varExplained, aes(k, varExplained)) + geom_line()
+```
+
+
+
 Plotting just the averages:
 
 ```{r}
@@ -80,13 +96,15 @@ ggplot(d, aes(position, mean, colour=sample)) + geom_line(size=1.2) + facet_wrap
 ```
 
 
+
+
 Clustering using relative signal instead:
 
 ```{r}
-cl <- clusterSignalMatrices(ml, k=4, scaleRows = TRUE)
-d <- meltSignals(ml, splitBy=cl)
+cl <- clusterSignalMatrices(ese, k=4, scaleRows = TRUE)
+d <- meltSignals(ese, splitBy=cl)
 ggplot(d, aes(position, mean, colour=sample)) + geom_line() + facet_wrap(~split)
-plotEnrichedHeatmaps(ml, row_split = cl, scale_rows = "global")
+plotEnrichedHeatmaps(ese, row_split = cl, scale_rows = "global")
 ```
 
 
@@ -97,10 +115,12 @@ Find what's enriched in one cluster with respect to the others:
 ```{r}
 # we first split the regions by cluster:
 split_regions <- split(rowRanges(ese), rowData(ese)$cluster)
+lengths(split_regions)
 
 res <- great(split_regions[["4"]], gene_sets="GO:BP", tss_source="mm10", 
              background=regions, cores=2)
 bp <- getEnrichmentTables(res)
+head(bp)
 ```
 
 We plot the top Biological Processes:
