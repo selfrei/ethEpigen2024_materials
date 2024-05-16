@@ -1,0 +1,128 @@
+---
+title: "assignment 10"
+author: "Selina Joy Frei"
+date: "2024-05-11"
+output: html_document
+---
+
+Download and decompress the following archive:
+https://ethz-ins.org/content/w10.assignment.zip
+This contains the bigwig files and peaks (bed) files for three TFs of the CREB family (all restricted to chr1; aligned against the hg38 genome)
+Use clustering and visualization to illustrate the relationship between the binding of the different proteins
+Use enrichment analysis (either GO or motif) on at least one of the clusters
+Write a paragraph describing your results
+
+```{r}
+suppressPackageStartupMessages({
+  library(GenomicRanges)
+  library(epiwraps)
+  library(ggplot2)
+  library(rGREAT) # Gene Ontology enrichment among genomic regions
+})
+```
+
+## Download the data
+
+```{r, eval=FALSE}
+options(timeout = 6000)
+download.file("https://ethz-ins.org/content/w10.assignment.zip", "w10.assignment.zip")
+unzip("w10.assignment.zip")
+list.files()
+```
+
+## Prepare the regions and the tracks --> read into a signal matrix
+
+```{r}
+peaks <- list.files(pattern="bed$")
+peaks <- lapply(peaks, rtracklayer::import.bed)
+peaks <- lapply(peaks, FUN=function(x) x[x$score>800])
+tracks <- list.files(pattern="bw$")
+regions <- reduce(unlist(GRangesList(peaks)))
+```
+
+## Prepare a summarized experiment and plot the heatmaps
+```{r}
+ese <- signal2Matrix(tracks, regions, extend=2000)
+plotEnrichedHeatmaps(ese, cluster_rows = TRUE)
+```
+## Clustering top down --> preserves better overall patterns
+
+```{r}
+set.seed(123)  # to ensure that it gives the same results every time because not deterministic
+cl <- clusterSignalMatrices(ese, k=4) # for each row it says which cluster it belongs to
+table(cl)
+head(cl)
+length(cl)
+length(regions)
+
+rowData(ese)$cluster <- cl #store it such that if we change any order in the object, the cluster order will also be updated
+```
+
+Plotting the clusters:
+
+```{r}
+plotEnrichedHeatmaps(ese, row_split=cl, trim=0.99,
+                     colors=c("white","darkred"))
+```
+```{r}
+
+# if we don't know how many clusters are good 
+cl2 <- clusterSignalMatrices(ese, k=2:10)
+ggplot(cl2$varExplained, aes(k, varExplained)) + geom_line()
+```
+Adding colors:
+
+```{r}
+mycolors <- c("1"="red", "2"="blue", "3"="darkgreen", "4"="black")
+plotEnrichedHeatmaps(ese, row_split=cl, mean_color=mycolors, colors=c("white","darkred"))
+```
+
+Plotting just the averages:
+
+```{r}
+d <- meltSignals(ese, splitBy=cl) # plot only average profiles of each cluster
+# compute average across clusters (splitBy)
+ggplot(d, aes(position, mean, colour=sample)) + geom_line(size=1.2) + facet_wrap(~split)
+```
+Clustering using relative signal instead to get more distinct signals:
+
+```{r}
+cl <- clusterSignalMatrices(ese, k=4, scaleRows = TRUE)
+d <- meltSignals(ese, splitBy=cl)
+ggplot(d, aes(position, mean, colour=sample)) + geom_line() + facet_wrap(~split)
+plotEnrichedHeatmaps(ese, row_split = cl, scale_rows = "global")
+```
+## Enrichment analysis
+
+Find what's enriched in one cluster with respect to the others:
+
+```{r}
+# we first split the regions by cluster:
+split_regions <- split(rowRanges(ese), rowData(ese)$cluster)
+
+res <- great(split_regions[["1"]], gene_sets="GO:BP", tss_source="mm10", 
+             background=regions, cores=2)
+#background = genome also possible but it will most likely make it less specific and just say it's neurons specific for all 4 clisters since all 4 clusters only contain neuronal genes. We want to knwo the differeces between the clusters and therefore we only use the neuronal genes as background anyways. 
+# cluster 4 enriched for specific biological processes?
+#tss_source --> where are genes 
+bp <- getEnrichmentTables(res)
+```
+
+We plot the top Biological Processes:
+
+```{r, fig.width=9, fig.height=6}
+ggplot(head(bp,15), aes(fold_enrichment, reorder(description, p_adjust), 
+                        size=observed_region_hits, color=-log10(p_adjust))) + 
+  geom_point() + scale_color_viridis_c()
+```
+
+### Results
+#From the first visualization plot it looks like CREB1 and CREB3L1 have a similar binding profile whereas CREB3 seems to bind more at those regions where the others don't bind. When plotting clusters with k=4, it confirms this first look because clusters 1,2 and 4 seem mostly CREB1 nad CREB3L1 binding whereas CREB3 dominates cluster 3.
+
+# From first clustering table: If we have 4 clusters, we can explain 65% of the variance. Which is not bad but normally one would choose k such that mroe than 80% of variance is explained. 
+
+# When performing clustering with k ranging from 2-10 and plotting the average variance explained, we can see that with 8 clusters we would have more than 80% of the variance explained but it might be a bit overfitting. I guess I would continue with 4 clusters since probably if I did more clusters, there would be more clusters that are actually similar and could be merged together like it is now. 
+
+# When we look at the relative signals instead of the absolute signals, we get a more clear pattern and suddenly, CREB1 and CREB3L1 seem less similar than before in their binding profile. Interestingly, despite being from the same faimily, there is no cluster where all three TFs seem to bind equally, at least under the tested conditions. 
+
+#Enrichment analysis: I did an enrichment analysis for cluster 1 since it seems interesting as it is very strongly dominated by CREB3.There seems to be dominance for: membrane ion transport. CREB3 is apparently located in the nuclear membrane and it regulates the trafficking from ER to Golgi
