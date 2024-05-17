@@ -1,0 +1,223 @@
+---
+title: "DNA methylation and enrichment analysis"
+author: "Emanuel / Pierre-Luc"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(GenomicRanges)
+  library(epiwraps)
+  library(ggplot2)
+  library(rGREAT)
+  library(AnnotationHub)
+  library(ensembldb)
+  library(bsseq)
+  library(BiocParallel)
+  library(edgeR)
+  library(DMRcate)
+  library(rtracklayer)
+  library(sechm)
+  library(pheatmap)
+  library(viridis)
+  library(data.table)
+})
+
+set.seed(40)
+```
+
+
+## Load the data
+
+Download:
+```{r, download}
+options(timeout = 6000)
+download.file("https://ethz-ins.org/content/w11_practical.zip", "w11_practical.zip")
+dir.create("./w11_practical")
+unzip("w11_practical.zip", exdir="./w11_practical")
+```
+
+The .bigwig files have already been reduced to chromosome one and only have to be loaded here:
+```{r, load bigwigs}
+tracksGr <- list("ATAC"="./w11_practical/ATAC.rds",
+                 "H3K27ac"="./w11_practical/H3K27ac.rds",
+                 "H3K4me3"="./w11_practical/H3K4me3.rds",
+                 "DNAme"="./w11_practical/DNAm.rds")
+tracksGr <- lapply(tracksGr, readRDS)
+```
+
+
+## Load the Annotation data
+
+```{r, annotation}
+ah <- AnnotationHub()
+ensdb <- ah[["AH89211"]] # GRCm38
+```
+
+Obtaining the promoter coordinates of chromosome 1:
+```{r, load promoters}
+chr1 <-  GRanges(seqnames=Rle(c("1")), 
+                          ranges = IRanges(1, end=195471971))
+
+# We define promoters as the regions +/- 200 of the TSS
+tssMargin <- 200
+promoterRegions <- promoters(ensdb, upstream=tssMargin, downstream=tssMargin,
+                             filter=GRangesFilter(chr1))
+```
+
+gene body coordinates: 
+```{r, load gene bodies}
+geneBodies <- genes(ensdb, columns=c("gene_seq_start", "gene_seq_end"),
+                    filter=GRangesFilter(chr1))
+```
+
+## Enriched Heatmaps
+
+### Promoters
+```{r}
+promoterRegions <- promoterRegions[1:2000]
+seqlevelsStyle(promoterRegions) <- "UCSC"
+smp <- signal2Matrix(tracksGr, promoterRegions, 
+                       extend=1000, w=20, 
+                       type="center",
+                       smooth=TRUE)
+
+plotEnrichedHeatmaps(smp, 
+                     axis_name="TSS",
+                     multiScale=TRUE,
+                     use_raster=TRUE)
+```
+
+Clustering
+```{r}
+cl <- clusterSignalMatrices(assays(smp)$input[,"DNAme", drop=FALSE], k=2)
+table(cl)
+
+mycolors <- c("1"="#E69F00", "2"="#56B4E9") # row_split=cl, mean_color=mycolors
+plotEnrichedHeatmaps(smp, 
+                     axis_name = c("TSS"), 
+                     row_split=cl,
+                     scale_title="signal",
+                     mean_color=mycolors,
+                     multiScale=TRUE,
+                     use_raster=TRUE)
+```
+
+For the colors see: [Colorblind Color Palette (Discrete) and Scales](https://jrnold.github.io/ggthemes/reference/colorblind.html)
+
+### TF-Bindings
+
+```{r}
+tracksDNAm <- readRDS("./w11_practical_extra/tracksDNAm_hb.rds")
+bindingSites <- readRDS("./w11_practical_extra/ctcf_binding_sites_hb.rds")
+
+smTfbs <- signal2Matrix(list("DNAm"=tracksDNAm), 
+                        bindingSites, 
+                        extend=1000, w=20, 
+                        type="scale", smooth=TRUE)
+plotEnrichedHeatmaps(smTfbs, 
+                     axis_name = c("peak_start", "peak_end"),
+                     use_raster=TRUE)
+```
+
+
+### Gene bodies
+
+```{r}
+se <- readRDS("./w11_practical_extra/EnrichmentSE.rds")
+plotEnrichedHeatmaps(se, multiScale=TRUE)
+```
+
+## Differential Methylation Testing
+
+### Bsseq object
+The Bisulfite-sequenncing (BS-seq) data we are looking is from the [bsseqData](https://bioconductor.org/packages/release/data/experiment/html/bsseqData.html) package.
+It contains colon cancer samples with 3 patients with each a colon cancer and normal colon sample. 
+Here we only look at chromosome 22. 
+
+```{r, bsseq}
+library(bsseq)
+bs <- readRDS("./w11_practical/bs.rds")
+
+rowRanges(bs)
+pData(bs)
+```
+
+### Testing
+
+Get annotations (hs):
+```{r}
+# genes
+ensdb <- ah[["AH109336"]]
+chr22 <-  GRanges(seqnames=Rle(c("22")), 
+                  ranges = IRanges(1, end=50818468))
+genesChr22 <- genes(ensdb, columns=c("gene_seq_start", "gene_seq_end", "gene_name"),
+                    filter=GRangesFilter(chr22))
+seqlevelsStyle(genesChr22) <- "UCSC"
+
+# promoters
+tssMargin <- 200
+promotersChr22 <- promoters(ensdb, upstream=tssMargin, downstream=tssMargin,
+                             filter=GRangesFilter(chr22), columns=c("gene_name"))
+seqlevelsStyle(promotersChr22) <- "UCSC"
+```
+
+Retrieve metyhlation levels and visualize:
+```{r, look at bsseq objects}
+metPr <- bsseq::getMeth(bs, 
+                        regions=promotersChr22[1:100], 
+                        what="perRegion")
+colnames(metPr) <- colnames(bs)
+rownames(metPr) <- promotersChr22$gene_name[1:100]
+metPr <- metPr[!is.na(rowSums(metPr)),]
+
+library(viridis)
+library(pheatmap)
+
+annotationCol <- as.data.frame(pData(bs))
+rownames(annotationCol) <- colnames(metPr)
+pheatmap::pheatmap(metPr, 
+                   cluster_rows=TRUE,
+                   cluster_cols=FALSE,
+                   annotation_col=annotationCol,
+                   show_rownames = TRUE,
+                   color=rocket(10))
+```
+
+Differential methylation testing: 
+```{r, dm testing}
+# design matrix
+pData(bs)$Type <- relevel(as.factor(pData(bs)$Type), ref="normal")
+design <- model.matrix(~Type+Pair, data=pData(bs)) 
+
+# adapt for methylation data
+methdesign <- modelMatrixMeth(design)
+seqAnnot <- sequencing.annotate(bs, methdesign, 
+                                all.cov=TRUE, 
+                                coef="Typecancer")
+dmrcateRes <- dmrcate(seqAnnot, 
+                      C=2, 
+                      min.cpgs=5,
+                      pcutoff=0.05) #caution!
+dmrRanges <- extractRanges(dmrcateRes, genome="hg38")
+saveRDS(dmrRanges, "./w11_practical/dmr.rds")
+
+dmrRanges <- dmrRanges[order(abs(dmrRanges$meandiff), decreasing=TRUE)]
+DMR.plot(dmrRanges, dmr=1, phen.col=c(rep(mycolors[1], 3),
+                                      rep(mycolors[2], 3)), 
+         group.means=TRUE,
+         CpGs=bs, genome="hg38")
+dmrRangesGenes <- dmrRanges[!is.na(dmrRanges$overlapping.genes)]
+```
+
+Obtain the coordinates of the genes within DMRs. 
+```{r, get the DM genes}
+# Get the genes within Differentially methylated regions
+topIdx <- order(dmrRangesGenes$min_smoothed_fdr)[1:10]
+genesDmr <- unlist(tstrsplit(dmrRangesGenes[topIdx]$overlapping.genes, split=", "))
+genesDmr <- genesDmr[!is.na(genesDmr)]
+dmrGenes <- genesChr22[genesChr22$gene_name %in% genesDmr]
+dmrGenes
+```
